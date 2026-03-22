@@ -1,57 +1,60 @@
-# UART Transceiver
+# UART Transceiver — Verilog
 
-A robust, configurable UART transceiver implemented in Verilog-2001.
+Parameterized UART transceiver. Validated on a Renesas ForgeFPGA at 115200 baud.
 
-## Features
-- **Configurable Parameters**: Baud rate, clock frequency, data size (default 8), stop bits (1/2), parity (NONE/EVEN/ODD).
-- **Oversampling**: 16x oversampling for noise immunity.
-- **Robustness**: 
-  - 3-stage synchronizers on inputs.
-  - Majority voting sample logic.
-  - False Start Bit recovery (glitch rejection < 8 ticks).
-- **Error Detection**: Parity error and Frame error reporting aligned with datavalid signal.
+Started as a basic implementation, iteratively improved by studying real hardware — added majority-based sampling, false-start recovery, and configurable parity along the way.
 
-## Directory Structure
-- `src/`: RTL source code.
-  - `uart.v`: Top-level module.
-  - `rx.v`: Receiver core with Finite State Machine.
-  - `tx.v`: Transmitter core.
-  - `baud_gen.v`: Tick generator.
-  - `sampler.v`: Input synchronization and sampling logic.
-- `tb/`: Testbenches.
-  - `tb_uart_top.v`: System-level loopback verification.
-  - `tb_rx_recovery.v`: False-start recovery test.
-  - `tb_*.v`: Unit tests for submodules.
-- `fpga/`: Renesas ForgeFPGA specific wrappers.
+---
+
+## Parameters
+
+| Parameter | Default | Options |
+|---|---|---|
+| `CLOCKFREQ` | 50,000,000 | any |
+| `BAUDRATE` | 9600 | any |
+| `DATASIZE` | 8 | any |
+| `PARITY` | `"NONE"` | `"NONE"`, `"EVEN"`, `"ODD"` |
+| `STOPBITS` | 1 | 1, 2 |
+| `OVERSAMPLE` | 16 | any |
+
+---
+
+## Architecture
+
+```
+uart
+├── baud_gen
+├── rx
+│   ├── sampler       — majority vote + false-start detection
+│   ├── sipo
+│   └── parity_gen    — generate block, zero overhead if PARITY="NONE"
+└── tx
+    ├── piso
+    └── parity_gen
+```
+
+RX FSM: `IDLE → START → DATA → PARITY → STOP → IDLE`
+
+---
 
 ## Simulation
-Verified using Icarus Verilog (`iverilog`).
 
-### Run System Verification
 ```bash
 cd tb
-iverilog -o sim.out -I ../src ../src/*.v tb_uart_top.v
-vvp sim.out
+bash run_all_tests.sh   # runs all unit + integration tests via iverilog
 ```
 
-### Run Unit Tests
-Example for Baud Generator:
+Each submodule has its own testbench. Full loopback test covers 14 byte patterns — alternating bits, walking ones, boundary cases, random.
+
+![Loopback waveform](images/loopback_waveform.png)
+
+---
+
+## Run a single test
+
 ```bash
-iverilog -o baud.out -I ../src ../src/baud_gen.v tb_baud_gen.v
-vvp baud.out
+cd tb
+iverilog -g2012 -I ../src -o tb.vvp ../src/*.v tb_loopback_test.v
+vvp tb.vvp
+gtkwave tb_loopback_test.vcd
 ```
-
-## Interface (`uart.v`)
-| Signal | Direction | Description |
-|--------|-----------|-------------|
-| `i_clk` | Input | System Clock (default 50MHz) |
-| `i_rst_n` | Input | Active-Low Asynchronous Reset |
-| `i_rx_line` | Input | Serial RX Line |
-| `i_rx_en` | Input | Receiver Enable |
-| `o_rx_data` | Output | Received Data Byte |
-| `o_rx_done` | Output | Data Valid Pulse (1 cycle) |
-| `o_rx_err...` | Output | Frame/Parity Error Flags (Valid when done=1) |
-| `i_tx_data` | Input | Data to Transmit |
-| `i_tx_en` | Input | Transmit Trigger |
-| `o_tx_line` | Output | Serial TX Line |
-| `o_tx_busy` | Output | Transmitter Busy Flag |
