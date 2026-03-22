@@ -1,4 +1,4 @@
-# UART Transceiver — Verilog
+# UART Transceiver
 
 Parameterized UART transceiver. Validated on a Renesas ForgeFPGA at 115200 baud.
 
